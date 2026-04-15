@@ -1,0 +1,15 @@
+---
+- name: Configure all homelab hosts
+  hosts: all
+  roles:
+    - common
+
+- name: Install K3S on Kubernetes nodes
+  hosts: homelab-gitlab
+  roles:
+    - kubes
+
+- name: Install Gitea on Kubernetes nodes
+  hosts: homelab-gitlab
+  roles:
+    - gitea

@@ -1,0 +1,10 @@
+---
+timezone: Europe/Paris
+dns_servers:
+  - 1.1.1.1
+  - 9.9.9.9
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+admin_user: root

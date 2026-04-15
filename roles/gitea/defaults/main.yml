@@ -1,0 +1,15 @@
+---
+gitea_namespace: gitea
+gitea_helm_repo_name: gitea-charts
+gitea_helm_repo_url: https://dl.gitea.com/charts/
+gitea_helm_chart_version: ""
+gitea_http_port: 3000
+gitea_ssh_port: 2222
+
+# Dynamically picks up the IP from your inventory
+gitea_domain: "{{ ansible_host }}"
+
+# Admin credentials
+gitea_admin_username: ""
+gitea_admin_password: ""
+gitea_admin_email: ""

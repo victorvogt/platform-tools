@@ -1,0 +1,62 @@
+## Gitea Helm values — HA disabled (single-instance SQLite setup)
+
+replicaCount: 1
+
+# Disable all HA sub-charts
+redis-cluster:
+  enabled: false
+redis:
+  enabled: false
+postgresql:
+  enabled: false
+postgresql-ha:
+  enabled: false
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    # If you use cert-manager later, add annotations here
+    kubernetes.io/ingress.class: traefik
+  hosts:
+    - host: {{ gitea_domain }}.nip.io
+      paths:
+        - path: /
+          pathType: Prefix
+
+gitea:
+  admin:
+    username: {{ gitea_admin_username }}
+    password: {{ gitea_admin_password }}
+    email: {{ gitea_admin_email }}
+  config:
+    database:
+      DB_TYPE: sqlite3
+    session:
+      PROVIDER: memory
+    cache:
+      ADAPTER: memory
+    queue:
+      TYPE: level
+    server:
+      DOMAIN: {{ gitea_domain }}.nip.io
+      SSH_DOMAIN: {{ gitea_domain }}
+      ROOT_URL: http://{{ gitea_domain }}.nip.io/
+      HTTP_PORT: {{ gitea_http_port }}
+      SSH_PORT: {{ gitea_ssh_port }}
+    mirror:
+      ENABLED: true
+    migrations:
+      ALLOWED_DOMAINS: "github.com,*.github.com"
+
+service:
+  http:
+    port: {{ gitea_http_port }}
+  ssh:
+    type: NodePort
+    port: {{ gitea_ssh_port }}
+    nodePort: 30022
