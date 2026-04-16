@@ -1,0 +1,69 @@
+## Terrakube Helm values — single-instance homelab setup
+## Exposed at http://{{ terrakube_domain }}:{{ terrakube_host_port }}
+## Container listens on port {{ terrakube_service_port }}
+
+# No Ingress — we expose directly via a LoadBalancer service.
+# K3s's built-in servicelb (Klipper) will bind {{ terrakube_host_port }} on the node IP.
+ingress:
+  enabled: false
+
+# Bootstrap admin account
+admin:
+  username: {{ terrakube_admin_username }}
+  password: {{ terrakube_admin_password }}
+  email: {{ terrakube_admin_email }}
+
+# Embedded PostgreSQL (disable for external DB)
+postgresql:
+  enabled: true
+  auth:
+    username: terrakube
+    password: terrakube
+    database: terrakube
+  primary:
+    persistence:
+      enabled: true
+      size: {{ terrakube_postgres_storage }}
+
+# Embedded MinIO for object storage (disable for external S3)
+minio:
+  enabled: true
+  mode: standalone
+  persistence:
+    enabled: true
+    size: {{ terrakube_minio_storage }}
+  auth:
+    rootUser: terrakube
+    rootPassword: terrakube
+
+# UI — primary user-facing component, exposed on the host
+ui:
+  replicaCount: "1"
+  url: http://{{ terrakube_domain }}:{{ terrakube_host_port }}
+  containerPort: {{ terrakube_service_port }}
+  service:
+    type: LoadBalancer
+    port: {{ terrakube_host_port }}
+    targetPort: {{ terrakube_service_port }}
+
+# Other components kept cluster-internal (ClusterIP)
+api:
+  replicaCount: "1"
+  service:
+    type: ClusterIP
+
+registry:
+  replicaCount: "1"
+  service:
+    type: ClusterIP
+
+executor:
+  replicaCount: "1"
+  service:
+    type: ClusterIP
+
+resources:
+  limits:
+    memory: "1Gi"  # Total allowed for this specific container
+  requests:
+    memory: "512Mi" # Guaranteed amount for this specific container

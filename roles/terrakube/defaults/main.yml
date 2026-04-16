@@ -1,0 +1,23 @@
+---
+terrakube_namespace: terrakube
+terrakube_helm_repo_name: terrakube-charts
+terrakube_helm_repo_url: https://charts.terrakube.io
+terrakube_helm_chart_version: ""
+
+# Persistence
+terrakube_postgres_storage: 10Gi
+terrakube_minio_storage: 10Gi
+
+# Networking
+# terrakube_service_port = container/pod port Terrakube listens on
+# terrakube_host_port    = external port bound on the node IP (LoadBalancer)
+terrakube_service_port: 3100
+terrakube_host_port: 8080
+
+# Dynamically picks up the IP from your inventory — used for access URL
+terrakube_domain: "{{ ansible_host }}"
+
+# Admin credentials
+terrakube_admin_username: ""
+terrakube_admin_password: ""
+terrakube_admin_email: ""

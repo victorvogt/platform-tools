@@ -1,0 +1,64 @@
+---
+# ---- Helm prerequisites ----
+
+- name: Check if Helm is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/helm
+  register: helm_binary
+
+- name: Install Helm
+  ansible.builtin.shell: |
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  when: not helm_binary.stat.exists
+
+# ---- Terrakube namespace ----
+
+- name: Create Terrakube namespace
+  ansible.builtin.command: k3s kubectl create namespace {{ terrakube_namespace }}
+  register: ns_result
+  changed_when: ns_result.rc == 0
+  failed_when: ns_result.rc != 0 and 'already exists' not in ns_result.stderr
+
+# ---- Helm repo ----
+
+- name: Add Terrakube Helm repository
+  ansible.builtin.command: helm repo add {{ terrakube_helm_repo_name }} {{ terrakube_helm_repo_url }}
+  register: repo_result
+  changed_when: "'has been added' in repo_result.stdout"
+
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update
+  changed_when: false
+
+# ---- Render values and install ----
+
+- name: Template Helm values file
+  ansible.builtin.template:
+    src: values.yml.j2
+    dest: /tmp/terrakube-values.yml
+    mode: "0600"
+
+- name: Install Terrakube via Helm
+  ansible.builtin.command: >
+    helm upgrade --install terrakube {{ terrakube_helm_repo_name }}/terrakube
+    --namespace {{ terrakube_namespace }}
+    --values /tmp/terrakube-values.yml
+    {{ '--version ' + terrakube_helm_chart_version if terrakube_helm_chart_version else '' }}
+    --kubeconfig /etc/rancher/k3s/k3s.yaml
+  register: helm_result
+  changed_when: "'STATUS: deployed' in helm_result.stdout"
+
+- name: Wait for Terrakube API to be ready
+  ansible.builtin.command: >
+    k3s kubectl -n {{ terrakube_namespace }} rollout status deployment/terrakube-api --timeout=300s
+  changed_when: false
+  retries: 3
+  delay: 10
+  register: rollout
+  until: rollout.rc == 0
+
+- name: Clean up temporary values file
+  ansible.builtin.file:
+    path: /tmp/terrakube-values.yml
+    state: absent
+  when: false
