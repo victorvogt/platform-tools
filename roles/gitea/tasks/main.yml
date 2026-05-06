@@ -62,3 +62,8 @@
     path: /tmp/gitea-values.yml
     state: absent
   when: false
+
+# ---- S3 backup CronJob ----
+
+- name: Install Gitea S3 backup CronJob
+  ansible.builtin.include_tasks: backup.yml

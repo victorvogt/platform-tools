@@ -1,0 +1,70 @@
+---
+- name: Ensure python3-kubernetes is installed on remote host
+  ansible.builtin.package:
+    name: python3-kubernetes
+    state: present
+  become: yes
+
+- name: Load vault variables
+  ansible.builtin.include_vars:
+    file: vault.yml
+
+- name: Create Kubernetes Secret for Gitea S3 backup
+  kubernetes.core.k8s:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gitea-s3-backup-secret
+        namespace: "{{ gitea_namespace }}"
+      type: Opaque
+      stringData:
+        access_key: "{{ vault_gitea_backup_s3_access_key }}"
+        secret_key: "{{ vault_gitea_backup_s3_secret_key }}"
+
+- name: Deploy Gitea S3 backup CronJob
+  kubernetes.core.k8s:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    definition:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: gitea-s3-backup
+        namespace: "{{ gitea_namespace }}"
+      spec:
+        schedule: "0 3 * * *"
+        concurrencyPolicy: Forbid
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: backup-worker
+                    image: gitea/gitea:1.25.5
+                    env:
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: gitea-s3-backup-secret
+                            key: access_key
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: gitea-s3-backup-secret
+                            key: secret_key
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -e
+                        apk add --no-cache aws-cli
+                        su git -c "gitea dump -c /data/gitea/conf/app.ini -f /tmp/gitea-dump.zip"
+                        aws --endpoint-url https://s3.fr-par.scw.cloud s3 cp /tmp/gitea-dump.zip s3://{{ vault_gitea_backup_s3_name }}/gitea-backup-$(date +%Y-%m-%d).zip
+                    volumeMounts:
+                      - name: gitea-data
+                        mountPath: /data
+                volumes:
+                  - name: gitea-data
+                    persistentVolumeClaim:
+                      claimName: gitea-shared-storage
+                restartPolicy: OnFailure

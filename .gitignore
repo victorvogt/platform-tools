@@ -1,5 +1,4 @@
 *.retry
 *.pyc
 .vault_pass
-vault.yml
 .idea
