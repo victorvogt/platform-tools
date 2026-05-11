@@ -32,9 +32,9 @@ ingress:
 
 gitea:
   admin:
-    username: {{ gitea_admin_username }}
-    password: {{ gitea_admin_password }}
-    email: {{ gitea_admin_email }}
+    username: {{ vault_gitea_admin_username }}
+    password: {{ vault_gitea_admin_password }}
+    email: {{ vault_gitea_admin_email }}
   config:
     database:
       DB_TYPE: sqlite3

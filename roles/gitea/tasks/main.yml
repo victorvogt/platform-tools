@@ -1,4 +1,8 @@
 ---
+- name: Load vault variables
+  ansible.builtin.include_vars:
+    file: vault.yml
+
 # ---- Helm prerequisites ----
 
 - name: Check if Helm is installed
