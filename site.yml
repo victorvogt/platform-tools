@@ -5,11 +5,11 @@
     - common
 
 - name: Install K3S on Kubernetes nodes
-  hosts: homelab-gitlab
+  hosts: gitlab
   roles:
     - kubes
 
 - name: Install Gitea on Kubernetes nodes
-  hosts: homelab-gitlab
+  hosts: gitlab
   roles:
     - gitea
