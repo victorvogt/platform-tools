@@ -262,4 +262,3 @@ ansible homelab-gitlab -m command -a \
 - `roles/gitea/vars/vault.yml` is **git-ignored** — only the `.example` template is tracked.
 - Temporary Helm values files (`/tmp/gitea-values.yml`, `/tmp/terrakube-values.yml`) are rendered on the remote host with mode `0600` and deleted after deployment.
 - `host_key_checking` is disabled in `ansible.cfg` for convenience — consider enabling it in production.
-
