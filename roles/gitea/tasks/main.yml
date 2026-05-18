@@ -65,7 +65,6 @@
   ansible.builtin.file:
     path: /tmp/gitea-values.yml
     state: absent
-  when: false
 
 # ---- S3 backup CronJob ----
 
