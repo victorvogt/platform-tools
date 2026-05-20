@@ -1,0 +1,107 @@
+---
+# Restores a Gitea dump zip into an existing k3s-hosted Gitea deployment.
+# Expects `gitea_backup_local_path` to be set by the calling playbook.
+
+- name: Copy backup archive to target server
+  ansible.builtin.copy:
+    src: "{{ gitea_backup_local_path }}"
+    dest: "{{ gitea_remote_backup_path }}"
+    mode: "0600"
+
+- name: Scale down Gitea deployment
+  ansible.builtin.command: >
+    k3s kubectl scale deployment gitea
+    --replicas=0
+    -n {{ gitea_namespace }}
+  changed_when: true
+
+- name: Wait for Gitea pods to terminate
+  ansible.builtin.command: >
+    k3s kubectl wait
+    --for=delete pod
+    -l app.kubernetes.io/name=gitea
+    -n {{ gitea_namespace }}
+    --timeout=60s
+  changed_when: false
+  failed_when: false
+
+- name: Remove any leftover restore pod
+  ansible.builtin.command: >
+    k3s kubectl delete pod gitea-restore
+    -n {{ gitea_namespace }}
+    --ignore-not-found
+  changed_when: false
+
+- name: Launch temporary restore pod
+  ansible.builtin.command: >
+    k3s kubectl run gitea-restore
+    --image={{ gitea_image }}
+    --restart=Never
+    -n {{ gitea_namespace }}
+    --overrides={
+      "spec":{
+        "containers":[{
+          "name":"gitea-restore",
+          "image":"{{ gitea_image }}",
+          "command":["sleep","3600"],
+          "volumeMounts":[{"name":"data","mountPath":"/data"}]
+        }],
+        "volumes":[{
+          "name":"data",
+          "persistentVolumeClaim":{"claimName":"{{ gitea_pvc_name }}"}
+        }]
+      }
+    }
+  changed_when: true
+
+- name: Wait for restore pod to be ready
+  ansible.builtin.command: >
+    k3s kubectl wait pod/gitea-restore
+    -n {{ gitea_namespace }}
+    --for=condition=Ready
+    --timeout=120s
+  changed_when: false
+
+- name: Copy backup archive into restore pod
+  ansible.builtin.command: >
+    k3s kubectl cp
+    {{ gitea_remote_backup_path }}
+    {{ gitea_namespace }}/gitea-restore:/tmp/gitea-migration-backup.zip
+  changed_when: true
+
+- name: Run gitea restore-backup
+  ansible.builtin.command: >
+    k3s kubectl exec -n {{ gitea_namespace }} gitea-restore --
+    su git -c "gitea restore-backup -c /data/gitea/conf/app.ini -f /tmp/gitea-migration-backup.zip"
+  changed_when: true
+  register: restore_output
+
+- name: Show restore output
+  ansible.builtin.debug:
+    var: restore_output.stdout_lines
+
+- name: Delete restore pod
+  ansible.builtin.command: >
+    k3s kubectl delete pod gitea-restore
+    -n {{ gitea_namespace }}
+    --ignore-not-found
+  changed_when: true
+
+- name: Scale Gitea deployment back up
+  ansible.builtin.command: >
+    k3s kubectl scale deployment gitea
+    --replicas=1
+    -n {{ gitea_namespace }}
+  changed_when: true
+
+- name: Wait for Gitea rollout to complete
+  ansible.builtin.command: >
+    k3s kubectl rollout status deployment/gitea
+    -n {{ gitea_namespace }}
+    --timeout=120s
+  changed_when: false
+
+- name: Clean up backup archive from target server
+  ansible.builtin.file:
+    path: "{{ gitea_remote_backup_path }}"
+    state: absent

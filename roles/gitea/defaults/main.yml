@@ -5,6 +5,8 @@ gitea_helm_repo_url: "https://dl.gitea.com/charts/"
 gitea_helm_chart_version: ""
 gitea_http_port: 3000
 gitea_ssh_port: 2222
+gitea_image: "gitea/gitea:1.25.5"
+gitea_pvc_name: "gitea-shared-storage"
 
 # Dynamically picks up the IP from your inventory
 gitea_domain: "{{ ansible_host }}"

@@ -1,0 +1,99 @@
+---
+# Migrate Gitea from one k3s instance to another.
+#
+# Flow:
+#   1. localhost  — finds the latest backup zip in Scaleway S3 and downloads it to /tmp
+#   2. gitea_target — restores the zip into the running Gitea k3s deployment
+#
+# Prerequisites (local machine):
+#   - ansible-vault password file configured (see ansible.cfg)
+#   - aws CLI installed  (`brew install awscli`)
+#   - SSH access to the target server
+#
+# Usage:
+#   ansible-playbook -i inventory_migrate.ini playbooks/gitea_migrate.yml
+
+# ---------------------------------------------------------------------------
+# Play 1 — Download latest backup from Scaleway S3 to localhost
+# ---------------------------------------------------------------------------
+- name: Download latest Gitea backup from S3
+  hosts: localhost
+  connection: local
+  vars_files:
+    - "{{ playbook_dir }}/../roles/gitea/vars/vault.yml"
+  vars:
+    s3_endpoint: https://s3.fr-par.scw.cloud
+    s3_bucket: "{{ vault_gitea_backup_s3_name }}"
+    local_backup_path: /tmp/gitea-migration-backup.zip
+
+  tasks:
+    - name: Verify aws CLI is installed
+      ansible.builtin.command: aws --version
+      changed_when: false
+      register: aws_version
+
+    - name: List objects in S3 backup bucket
+      ansible.builtin.command: >
+        aws --endpoint-url {{ s3_endpoint }}
+        s3 ls s3://{{ s3_bucket }}/
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ vault_gitea_backup_s3_access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ vault_gitea_backup_s3_secret_key }}"
+      register: s3_listing
+      changed_when: false
+
+    - name: Resolve latest backup filename
+      ansible.builtin.set_fact:
+        latest_backup_file: >-
+          {{ s3_listing.stdout_lines
+             | map('regex_search', 'gitea-backup-[\d-]+\.zip')
+             | select('string')
+             | sort
+             | last }}
+
+    - name: Abort if no backup found
+      ansible.builtin.fail:
+        msg: "No gitea-backup-*.zip found in s3://{{ s3_bucket }}/"
+      when: latest_backup_file | length == 0
+
+    - name: Show backup selected for download
+      ansible.builtin.debug:
+        msg: "Downloading s3://{{ s3_bucket }}/{{ latest_backup_file }}"
+
+    - name: Download backup from S3
+      ansible.builtin.command: >
+        aws --endpoint-url {{ s3_endpoint }}
+        s3 cp s3://{{ s3_bucket }}/{{ latest_backup_file }}
+        {{ local_backup_path }}
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ vault_gitea_backup_s3_access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ vault_gitea_backup_s3_secret_key }}"
+      changed_when: true
+
+    - name: Confirm local backup is present
+      ansible.builtin.stat:
+        path: "{{ local_backup_path }}"
+      register: backup_stat
+
+    - name: Fail if download produced an empty file
+      ansible.builtin.fail:
+        msg: "Downloaded backup is empty or missing at {{ local_backup_path }}"
+      when: not backup_stat.stat.exists or backup_stat.stat.size == 0
+
+# ---------------------------------------------------------------------------
+# Play 2 — Restore backup on target k3s instance
+# ---------------------------------------------------------------------------
+- name: Restore Gitea on target instance
+  hosts: gitea_target
+  become: true
+  vars:
+    gitea_namespace: gitea
+    gitea_image: gitea/gitea:1.25.5
+    gitea_pvc_name: gitea-shared-storage
+    gitea_backup_local_path: /tmp/gitea-migration-backup.zip
+    gitea_remote_backup_path: /tmp/gitea-migration-backup.zip
+
+  tasks:
+    - name: Run Gitea restore
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../roles/gitea/tasks/restore.yml"
